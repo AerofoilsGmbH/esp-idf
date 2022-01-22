@@ -10,7 +10,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
+// clang-format off
 #include <stdio.h>
 #include "esp_system.h"
 #include "esp_log.h"
@@ -248,8 +248,10 @@ esp_err_t WL_Flash::recoverPos()
 {
     esp_err_t result = ESP_OK;
     size_t position = 0;
-    ESP_LOGV(TAG, "%s start", __func__);
-    for (size_t i = 0; i < this->state.max_pos; i++) {
+    ESP_LOGI(TAG, "%s start", __func__);
+    bool found=false;
+    //do a coarse grid search first
+    for (size_t i = 0; i < this->state.max_pos; i=i+200) {
         bool pos_bits;
         position = i;
         result = this->flash_drv->read(this->addr_state1 + sizeof(wl_state_t) + i * this->cfg.wr_size, this->temp_buff, this->cfg.wr_size);
@@ -257,7 +259,51 @@ esp_err_t WL_Flash::recoverPos()
         WL_RESULT_CHECK(result);
         ESP_LOGV(TAG, "%s - check pos: result=0x%08x, position= %i, pos_bits= 0x%08x", __func__, (uint32_t)result, (uint32_t)position, (uint32_t)pos_bits);
         if (pos_bits == false) {
+            if(i>=200)
+                position=i-200;
             break; // we have found position
+        }
+    }
+    //do finer grid search
+    for (size_t i = position; i < this->state.max_pos; i=i+20) {
+        bool pos_bits;
+        position = i;
+        result = this->flash_drv->read(this->addr_state1 + sizeof(wl_state_t) + i * this->cfg.wr_size, this->temp_buff, this->cfg.wr_size);
+        pos_bits = this->OkBuffSet(i);
+        WL_RESULT_CHECK(result);
+        ESP_LOGV(TAG, "%s - check pos: result=0x%08x, position= %i, pos_bits= 0x%08x", __func__, (uint32_t)result, (uint32_t)position, (uint32_t)pos_bits);
+        if (pos_bits == false) {
+            if(i>=20)
+                position=i-20;
+            break; // we have found position
+        }
+    }
+    //then do linear search
+    for (size_t i = position; i < this->state.max_pos; i++) {
+        bool pos_bits;
+        position = i;
+        result = this->flash_drv->read(this->addr_state1 + sizeof(wl_state_t) + i * this->cfg.wr_size, this->temp_buff, this->cfg.wr_size);
+        pos_bits = this->OkBuffSet(i);
+        WL_RESULT_CHECK(result);
+        ESP_LOGV(TAG, "%s - check pos: result=0x%08x, position= %i, pos_bits= 0x%08x", __func__, (uint32_t)result, (uint32_t)position, (uint32_t)pos_bits);
+        if (pos_bits == false) {
+            found=true;
+            break; // we have found position
+        }
+    }
+
+    //if grid search failed, try it again with old method
+    if(position==this->state.max_pos && found==false){
+        for (size_t i = 0; i < this->state.max_pos; i++) {
+            bool pos_bits;
+            position = i;
+            result = this->flash_drv->read(this->addr_state1 + sizeof(wl_state_t) + i * this->cfg.wr_size, this->temp_buff, this->cfg.wr_size);
+            pos_bits = this->OkBuffSet(i);
+            WL_RESULT_CHECK(result);
+            ESP_LOGV(TAG, "%s - check pos: result=0x%08x, position= %i, pos_bits= 0x%08x", __func__, (uint32_t)result, (uint32_t)position, (uint32_t)pos_bits);
+            if (pos_bits == false) {
+                break; // we have found position
+            }
         }
     }
 
@@ -265,8 +311,8 @@ esp_err_t WL_Flash::recoverPos()
     if (this->state.pos == this->state.max_pos) {
         this->state.pos--;
     }
-    ESP_LOGD(TAG, "%s - this->state.pos= 0x%08x, position= 0x%08x, result= 0x%08x, max_pos= 0x%08x", __func__, (uint32_t)this->state.pos, (uint32_t)position, (uint32_t)result, (uint32_t)this->state.max_pos);
-    ESP_LOGV(TAG, "%s done", __func__);
+    ESP_LOGI(TAG, "%s - this->state.pos= 0x%08x, position= 0x%08x, result= 0x%08x, max_pos= 0x%08x", __func__, (uint32_t)this->state.pos, (uint32_t)position, (uint32_t)result, (uint32_t)this->state.max_pos);
+    ESP_LOGI(TAG, "%s done", __func__);
     return result;
 }
 
