@@ -133,7 +133,7 @@ esp_err_t WL_Flash::init()
     uint32_t crc1 = crc32::crc32_le(WL_CFG_CRC_CONST, (uint8_t *)&this->state, check_size);
     uint32_t crc2 = crc32::crc32_le(WL_CFG_CRC_CONST, (uint8_t *)state_copy, check_size);
 
-    ESP_LOGD(TAG, "%s - config ID=%i, stored ID=%i, access_count=%i, block_size=%i, max_count=%i, pos=%i, move_count=0x%8.8X",
+    ESP_LOGI(TAG, "%s - config ID=%i, stored ID=%i, access_count=%i, block_size=%i, max_count=%i, pos=%i, move_count=0x%8.8X",
              __func__,
              this->cfg.version,
              this->state.version,
@@ -253,7 +253,7 @@ esp_err_t WL_Flash::recoverPos()
         result = this->flash_drv->read(this->addr_state1 + sizeof(wl_state_t) + i * this->cfg.wr_size, this->temp_buff, this->cfg.wr_size);
         pos_bits = this->OkBuffSet(i);
         WL_RESULT_CHECK(result);
-        ESP_LOGV(TAG, "%s - check pos: result=0x%08x, position= %i, pos_bits= 0x%08x", __func__, (uint32_t)result, (uint32_t)position, (uint32_t)pos_bits);
+        ESP_LOGI(TAG, "%s - check pos: result=0x%08x, position= %i, pos_bits= 0x%08x", __func__, (uint32_t)result, (uint32_t)position, (uint32_t)pos_bits);
         if (pos_bits == false) {
             if(i>=200)
                 position=i-200;
@@ -267,7 +267,7 @@ esp_err_t WL_Flash::recoverPos()
         result = this->flash_drv->read(this->addr_state1 + sizeof(wl_state_t) + i * this->cfg.wr_size, this->temp_buff, this->cfg.wr_size);
         pos_bits = this->OkBuffSet(i);
         WL_RESULT_CHECK(result);
-        ESP_LOGV(TAG, "%s - check pos: result=0x%08x, position= %i, pos_bits= 0x%08x", __func__, (uint32_t)result, (uint32_t)position, (uint32_t)pos_bits);
+        ESP_LOGI(TAG, "%s - check pos: result=0x%08x, position= %i, pos_bits= 0x%08x", __func__, (uint32_t)result, (uint32_t)position, (uint32_t)pos_bits);
         if (pos_bits == false) {
             if(i>=20)
                 position=i-20;
@@ -281,7 +281,7 @@ esp_err_t WL_Flash::recoverPos()
         result = this->flash_drv->read(this->addr_state1 + sizeof(wl_state_t) + i * this->cfg.wr_size, this->temp_buff, this->cfg.wr_size);
         pos_bits = this->OkBuffSet(i);
         WL_RESULT_CHECK(result);
-        ESP_LOGV(TAG, "%s - check pos: result=0x%08x, position= %i, pos_bits= 0x%08x", __func__, (uint32_t)result, (uint32_t)position, (uint32_t)pos_bits);
+        ESP_LOGI(TAG, "%s - check pos: result=0x%08x, position= %i, pos_bits= 0x%08x", __func__, (uint32_t)result, (uint32_t)position, (uint32_t)pos_bits);
         if (pos_bits == false) {
             found=true;
             break; // we have found position
@@ -296,7 +296,7 @@ esp_err_t WL_Flash::recoverPos()
             result = this->flash_drv->read(this->addr_state1 + sizeof(wl_state_t) + i * this->cfg.wr_size, this->temp_buff, this->cfg.wr_size);
             pos_bits = this->OkBuffSet(i);
             WL_RESULT_CHECK(result);
-            ESP_LOGV(TAG, "%s - check pos: result=0x%08x, position= %i, pos_bits= 0x%08x", __func__, (uint32_t)result, (uint32_t)position, (uint32_t)pos_bits);
+            ESP_LOGI(TAG, "%s - check pos: result=0x%08x, position= %i, pos_bits= 0x%08x", __func__, (uint32_t)result, (uint32_t)position, (uint32_t)pos_bits);
             if (pos_bits == false) {
                 break; // we have found position
             }
