@@ -14,33 +14,33 @@
 
 #include <stdlib.h>
 #include <string.h>
+
+#include "diskio_impl.h"
+#include "diskio_rawflash.h"
+#include "diskio_wl.h"
 #include "esp_log.h"
 #include "esp_vfs.h"
 #include "esp_vfs_fat.h"
 #include "vfs_fat_internal.h"
-#include "diskio_impl.h"
-
-#include "diskio_rawflash.h"
-
 #include "wear_levelling.h"
-#include "diskio_wl.h"
 
-static const char *TAG = "vfs_fat_spiflash";
-esp_err_t esp_vfs_fat_spiflash_mount(const char* base_path,
-    const char* partition_label,
-    const esp_vfs_fat_mount_config_t* mount_config,
-    wl_handle_t* wl_handle)
-{
+static const char* TAG = "vfs_fat_spiflash";
+esp_err_t esp_vfs_fat_spiflash_mount(const char* base_path, const char* partition_label,
+                                     const esp_vfs_fat_mount_config_t* mount_config,
+                                     wl_handle_t* wl_handle) {
     esp_err_t result = ESP_OK;
     const size_t workbuf_size = 4096;
-    void *workbuf = NULL;
+    void* workbuf = NULL;
 
-    esp_partition_subtype_t subtype = partition_label ?
-            ESP_PARTITION_SUBTYPE_ANY : ESP_PARTITION_SUBTYPE_DATA_FAT;
-    const esp_partition_t *data_partition = esp_partition_find_first(ESP_PARTITION_TYPE_DATA,
-                                                subtype, partition_label);
+    esp_partition_subtype_t subtype =
+        partition_label ? ESP_PARTITION_SUBTYPE_ANY : ESP_PARTITION_SUBTYPE_DATA_FAT;
+    const esp_partition_t* data_partition =
+        esp_partition_find_first(ESP_PARTITION_TYPE_DATA, subtype, partition_label);
     if (data_partition == NULL) {
-        ESP_LOGE(TAG, "Failed to find FATFS partition (type='data', subtype='fat', partition_label='%s'). Check the partition table.", partition_label);
+        ESP_LOGE(TAG,
+                 "Failed to find FATFS partition (type='data', subtype='fat', "
+                 "partition_label='%s'). Check the partition table.",
+                 partition_label);
         return ESP_ERR_NOT_FOUND;
     }
 
@@ -60,10 +60,11 @@ esp_err_t esp_vfs_fat_spiflash_mount(const char* base_path,
 
     result = ff_diskio_register_wl_partition(pdrv, *wl_handle);
     if (result != ESP_OK) {
-        ESP_LOGE(TAG, "ff_diskio_register_wl_partition failed pdrv=%i, error - 0x(%x)", pdrv, result);
+        ESP_LOGE(TAG, "ff_diskio_register_wl_partition failed pdrv=%i, error - 0x(%x)", pdrv,
+                 result);
         goto fail;
     }
-    FATFS *fs;
+    FATFS* fs;
     result = esp_vfs_fat_register(base_path, drv, mount_config->max_files, &fs);
     if (result == ESP_ERR_INVALID_STATE) {
         // it's okay, already registered with VFS
@@ -76,8 +77,8 @@ esp_err_t esp_vfs_fat_spiflash_mount(const char* base_path,
     FRESULT fresult = f_mount(fs, drv, 1);
     if (fresult != FR_OK) {
         ESP_LOGW(TAG, "f_mount failed (%d)", fresult);
-        if (!((fresult == FR_NO_FILESYSTEM || fresult == FR_INT_ERR)
-              && mount_config->format_if_mount_failed)) {
+        if (!((fresult == FR_NO_FILESYSTEM || fresult == FR_INT_ERR) &&
+              mount_config->format_if_mount_failed)) {
             result = ESP_FAIL;
             goto fail;
         }
@@ -86,9 +87,13 @@ esp_err_t esp_vfs_fat_spiflash_mount(const char* base_path,
             result = ESP_ERR_NO_MEM;
             goto fail;
         }
+
+        ESP_LOGW(TAG, "Erasing Partition first, depending on partition size, this may take long");
+        esp_err_t err = esp_partition_erase_range(data_partition, 0x00, data_partition->size);
+        ESP_LOGW(TAG, "esp_partition_erase_range ret %s", esp_err_to_name(err));
+
         size_t alloc_unit_size = esp_vfs_fat_get_allocation_unit_size(
-                CONFIG_WL_SECTOR_SIZE,
-                mount_config->allocation_unit_size);
+            CONFIG_WL_SECTOR_SIZE, mount_config->allocation_unit_size);
         ESP_LOGI(TAG, "Formatting FATFS partition, allocation unit size=%d", alloc_unit_size);
         fresult = f_mkfs(drv, FM_ANY | FM_SFD, alloc_unit_size, workbuf, workbuf_size);
         if (fresult != FR_OK) {
@@ -115,8 +120,7 @@ fail:
     return result;
 }
 
-esp_err_t esp_vfs_fat_spiflash_unmount(const char *base_path, wl_handle_t wl_handle)
-{
+esp_err_t esp_vfs_fat_spiflash_unmount(const char* base_path, wl_handle_t wl_handle) {
     BYTE pdrv = ff_diskio_get_pdrv_wl(wl_handle);
     if (pdrv == 0xff) {
         return ESP_ERR_INVALID_STATE;
@@ -133,16 +137,17 @@ esp_err_t esp_vfs_fat_spiflash_unmount(const char *base_path, wl_handle_t wl_han
     return err;
 }
 
-esp_err_t esp_vfs_fat_rawflash_mount(const char* base_path,
-    const char* partition_label,
-    const esp_vfs_fat_mount_config_t* mount_config)
-{
+esp_err_t esp_vfs_fat_rawflash_mount(const char* base_path, const char* partition_label,
+                                     const esp_vfs_fat_mount_config_t* mount_config) {
     esp_err_t result = ESP_OK;
 
-    const esp_partition_t *data_partition = esp_partition_find_first(ESP_PARTITION_TYPE_DATA,
-            ESP_PARTITION_SUBTYPE_DATA_FAT, partition_label);
+    const esp_partition_t* data_partition = esp_partition_find_first(
+        ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_FAT, partition_label);
     if (data_partition == NULL) {
-        ESP_LOGE(TAG, "Failed to find FATFS partition (type='data', subtype='fat', partition_label='%s'). Check the partition table.", partition_label);
+        ESP_LOGE(TAG,
+                 "Failed to find FATFS partition (type='data', subtype='fat', "
+                 "partition_label='%s'). Check the partition table.",
+                 partition_label);
         return ESP_ERR_NOT_FOUND;
     }
 
@@ -157,11 +162,12 @@ esp_err_t esp_vfs_fat_rawflash_mount(const char* base_path,
 
     result = ff_diskio_register_raw_partition(pdrv, data_partition);
     if (result != ESP_OK) {
-        ESP_LOGE(TAG, "ff_diskio_register_raw_partition failed pdrv=%i, error - 0x(%x)", pdrv, result);
+        ESP_LOGE(TAG, "ff_diskio_register_raw_partition failed pdrv=%i, error - 0x(%x)", pdrv,
+                 result);
         goto fail;
     }
 
-    FATFS *fs;
+    FATFS* fs;
     result = esp_vfs_fat_register(base_path, drv, mount_config->max_files, &fs);
     if (result == ESP_ERR_INVALID_STATE) {
         // it's okay, already registered with VFS
@@ -185,14 +191,15 @@ fail:
     return result;
 }
 
-
-esp_err_t esp_vfs_fat_rawflash_unmount(const char *base_path, const char* partition_label)
-{
-    const esp_partition_t *data_partition = esp_partition_find_first(ESP_PARTITION_TYPE_DATA,
-            ESP_PARTITION_SUBTYPE_DATA_FAT, partition_label);
+esp_err_t esp_vfs_fat_rawflash_unmount(const char* base_path, const char* partition_label) {
+    const esp_partition_t* data_partition = esp_partition_find_first(
+        ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_FAT, partition_label);
 
     if (data_partition == NULL) {
-        ESP_LOGE(TAG, "Failed to find FATFS partition (type='data', subtype='fat', partition_label='%s'). Check the partition table.", partition_label);
+        ESP_LOGE(TAG,
+                 "Failed to find FATFS partition (type='data', subtype='fat', "
+                 "partition_label='%s'). Check the partition table.",
+                 partition_label);
         return ESP_ERR_NOT_FOUND;
     }
 
