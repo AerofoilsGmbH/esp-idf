@@ -23,8 +23,6 @@
 #include "compressed_enum_table.hpp"
 #include "string.h"
 
-using namespace std;
-
 namespace nvs
 {
 
@@ -105,7 +103,7 @@ public:
 
     void getKey(char* dst, size_t dstSize)
     {
-        strncpy(dst, key, min(dstSize, sizeof(key)));
+        strncpy(dst, key, std::min(dstSize, sizeof(key)));
         dst[dstSize-1] = 0;
     }
 
