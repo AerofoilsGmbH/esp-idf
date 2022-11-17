@@ -1519,15 +1519,6 @@ Queue_t * const pxQueue = xQueue;
 			{
 				if( xTicksToWait == ( TickType_t ) 0 )
 				{
-					/* For inheritance to have occurred there must have been an
-					initial timeout, and an adjusted timeout cannot become 0, as
-					if it were 0 the function would have exited. */
-					#if( configUSE_MUTEXES == 1 )
-					{
-						configASSERT( xInheritanceOccurred == pdFALSE );
-					}
-					#endif /* configUSE_MUTEXES */
-
 					/* The semaphore count was 0 and no block time is specified
 					(or the block time has expired) so exit now. */
 					taskEXIT_CRITICAL( &pxQueue->mux);
