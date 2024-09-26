@@ -263,11 +263,11 @@ esp_err_t WL_Flash::recoverPos()
         if (pos_bits == false) {
             if(i>=200)
                 position=i-200;
-            break; // we have found position
+            break; // we have found a coarse position
         }
     }
-    //do finer grid search
-    for (size_t i = 0; i < this->state.wl_part_max_sec_pos; i=i+20) {
+    //do finer grid search beginning from the coarse position
+    for (size_t i = position; i < this->state.wl_part_max_sec_pos; i=i+20) {
         bool pos_bits;
         position = i;
         result = this->partition->read(this->addr_state1 + sizeof(wl_state_t) + i * this->cfg.wl_pos_update_record_size, this->temp_buff, this->cfg.wl_pos_update_record_size);
@@ -277,11 +277,11 @@ esp_err_t WL_Flash::recoverPos()
         if (pos_bits == false) {
             if(i>=20)
                 position=i-20;
-            break; // we have found position
+            break; // we have found finer position
         }
     }
-    //then do linear search
-    for (size_t i = 0; i < this->state.wl_part_max_sec_pos; i++) {
+    //then do final linear search
+    for (size_t i = position; i < this->state.wl_part_max_sec_pos; i++) {
         bool pos_bits;
         position = i;
         result = this->partition->read(this->addr_state1 + sizeof(wl_state_t) + i * this->cfg.wl_pos_update_record_size, this->temp_buff, this->cfg.wl_pos_update_record_size);
@@ -315,7 +315,7 @@ esp_err_t WL_Flash::recoverPos()
     }
 
     ESP_LOGI(TAG, "%s - this->state.wl_dummy_sec_pos= 0x%08" PRIx32 ", position= 0x%08" PRIx32 ", result= 0x%08" PRIx32 ", wl_part_max_sec_pos= 0x%08" PRIx32 , __func__, (uint32_t)this->state.wl_dummy_sec_pos, (uint32_t)position, (uint32_t)result, (uint32_t)this->state.wl_part_max_sec_pos);
-    ESP_LOGI(TAG, "%s done", __func__);
+    ESP_LOGV(TAG, "%s done", __func__);
 
     return result;
 }
