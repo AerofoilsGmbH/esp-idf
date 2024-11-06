@@ -12,6 +12,8 @@
 #include "nvs_encrypted_partition.hpp"
 #endif // CONFIG_NVS_ENCRYPTION
 
+using namespace std;
+
 namespace nvs {
 
 NVSPartitionManager* NVSPartitionManager::instance = nullptr;
