@@ -1191,9 +1191,14 @@ static void UART_ISR_ATTR uart_rx_intr_handler_default(void *param)
                     }
                     UART_EXIT_CRITICAL_ISR(&uart_selectlock);
                     
-                    // Call user-registered RX data callback
-                    if (p_uart->rx_data_callback) {
-                        p_uart->rx_data_callback(uart_num, uart_event.size, p_uart->rx_data_callback_user_data);
+                    // Call user-registered RX data callback (protected by spinlock to prevent race conditions)
+                    UART_ENTER_CRITICAL_ISR(&(uart_context[uart_num].spinlock));
+                    uart_rx_data_cb_t callback = p_uart->rx_data_callback;
+                    void *callback_user_data = p_uart->rx_data_callback_user_data;
+                    UART_EXIT_CRITICAL_ISR(&(uart_context[uart_num].spinlock));
+                    
+                    if (callback) {
+                        callback(uart_num, uart_event.size, callback_user_data);
                     }
                 }
             } else {

@@ -72,6 +72,11 @@ static void IRAM_ATTR uart_rx_data_callback(uart_port_t uart_num, size_t size, v
 static void uart_rx_task(void *arg)
 {
     uint8_t *data = (uint8_t *) malloc(BUF_SIZE);
+    if (data == NULL) {
+        ESP_LOGE(TAG, "Failed to allocate memory for RX buffer");
+        vTaskDelete(NULL);
+        return;
+    }
     
     ESP_LOGI(TAG, "UART RX task started. Waiting for data...");
     

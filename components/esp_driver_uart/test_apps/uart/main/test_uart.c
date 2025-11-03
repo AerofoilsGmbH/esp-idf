@@ -652,7 +652,8 @@ TEST_CASE("uart rx data callback test", "[uart]")
     // Read and verify data
     uint8_t *rd_data = (uint8_t *)malloc(BUF_SIZE);
     TEST_ASSERT_NOT_NULL(rd_data);
-    int bytes_read = uart_read_bytes(uart_num, rd_data, test_len, pdMS_TO_TICKS(100));
+    const TickType_t read_timeout_ms = 100;
+    int bytes_read = uart_read_bytes(uart_num, rd_data, test_len, pdMS_TO_TICKS(read_timeout_ms));
     TEST_ASSERT_EQUAL(test_len, bytes_read);
     TEST_ASSERT_EQUAL_STRING_LEN(test_data, rd_data, bytes_read);
 
@@ -663,7 +664,8 @@ TEST_CASE("uart rx data callback test", "[uart]")
     size_t prev_count = ctx.callback_count;
     uart_write_bytes(uart_num, test_data, test_len);
     uart_wait_tx_done(uart_num, portMAX_DELAY);
-    vTaskDelay(pdMS_TO_TICKS(100)); // Give some time to ensure no callback
+    const TickType_t verify_delay_ms = 100;
+    vTaskDelay(pdMS_TO_TICKS(verify_delay_ms)); // Give some time to ensure no callback
     TEST_ASSERT_EQUAL(prev_count, ctx.callback_count); // Count should not change
 
     free(rd_data);
