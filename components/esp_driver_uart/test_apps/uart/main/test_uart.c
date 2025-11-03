@@ -584,3 +584,92 @@ TEST_CASE("uart in one-wire mode", "[uart]")
 
     TEST_ESP_OK(uart_driver_delete(uart_num));
 }
+
+// Context for RX data callback test
+typedef struct {
+    SemaphoreHandle_t data_ready_sem;
+    volatile size_t callback_count;
+    volatile size_t total_bytes;
+} uart_rx_callback_test_ctx_t;
+
+// Callback function for RX data test
+static void IRAM_ATTR test_uart_rx_data_callback(uart_port_t uart_num, size_t size, void *user_data)
+{
+    uart_rx_callback_test_ctx_t *ctx = (uart_rx_callback_test_ctx_t *)user_data;
+    ctx->callback_count++;
+    ctx->total_bytes += size;
+    
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    xSemaphoreGiveFromISR(ctx->data_ready_sem, &xHigherPriorityTaskWoken);
+    if (xHigherPriorityTaskWoken) {
+        portYIELD_FROM_ISR();
+    }
+}
+
+TEST_CASE("uart rx data callback test", "[uart]")
+{
+    uart_port_param_t port_param = {};
+    TEST_ASSERT(port_select(&port_param));
+
+    uart_port_t uart_num = port_param.port_num;
+    uart_config_t uart_config = {
+        .baud_rate = 115200,
+        .data_bits = UART_DATA_8_BITS,
+        .parity = UART_PARITY_DISABLE,
+        .stop_bits = UART_STOP_BITS_1,
+        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+        .source_clk = port_param.default_src_clk,
+    };
+
+    TEST_ESP_OK(uart_driver_install(uart_num, BUF_SIZE * 2, 0, 0, NULL, 0));
+    TEST_ESP_OK(uart_param_config(uart_num, &uart_config));
+    TEST_ESP_OK(uart_set_loop_back(uart_num, true));
+
+    // Create test context
+    uart_rx_callback_test_ctx_t ctx = {
+        .data_ready_sem = xSemaphoreCreateBinary(),
+        .callback_count = 0,
+        .total_bytes = 0,
+    };
+    TEST_ASSERT_NOT_NULL(ctx.data_ready_sem);
+
+    // Register the callback
+    TEST_ESP_OK(uart_set_rx_data_callback(uart_num, test_uart_rx_data_callback, &ctx));
+
+    // Write some test data
+    const char *test_data = "Hello UART Callback!";
+    int test_len = strlen(test_data);
+    uart_write_bytes(uart_num, test_data, test_len);
+    uart_wait_tx_done(uart_num, portMAX_DELAY);
+
+    // Wait for callback to be triggered
+    TEST_ASSERT_EQUAL(pdTRUE, xSemaphoreTake(ctx.data_ready_sem, pdMS_TO_TICKS(1000)));
+    
+    // Verify callback was called
+    TEST_ASSERT_GREATER_THAN(0, ctx.callback_count);
+    TEST_ASSERT_GREATER_THAN(0, ctx.total_bytes);
+
+    // Read and verify data
+    uint8_t *rd_data = (uint8_t *)malloc(BUF_SIZE);
+    TEST_ASSERT_NOT_NULL(rd_data);
+    const TickType_t read_timeout_ms = 100;
+    int bytes_read = uart_read_bytes(uart_num, rd_data, test_len, pdMS_TO_TICKS(read_timeout_ms));
+    TEST_ASSERT_EQUAL(test_len, bytes_read);
+    TEST_ASSERT_EQUAL_STRING_LEN(test_data, rd_data, bytes_read);
+
+    // Test unregistering callback (set to NULL)
+    TEST_ESP_OK(uart_set_rx_data_callback(uart_num, NULL, NULL));
+    
+    // Write more data and verify callback is not called anymore
+    size_t prev_count = ctx.callback_count;
+    uart_write_bytes(uart_num, test_data, test_len);
+    uart_wait_tx_done(uart_num, portMAX_DELAY);
+    const TickType_t verify_delay_ms = 100;
+    vTaskDelay(pdMS_TO_TICKS(verify_delay_ms)); // Give some time to ensure no callback
+    TEST_ASSERT_EQUAL(prev_count, ctx.callback_count); // Count should not change
+
+    free(rd_data);
+    vSemaphoreDelete(ctx.data_ready_sem);
+    TEST_ESP_OK(uart_driver_delete(uart_num));
+}
+
