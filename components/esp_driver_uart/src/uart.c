@@ -147,6 +147,8 @@ typedef struct {
     uint8_t tx_brk_len;                 /*!< TX break signal cycle length/number */
     uint8_t tx_waiting_brk;             /*!< Flag to indicate that TX FIFO is ready to send break signal after FIFO is empty, do not push data into TX FIFO right now.*/
     uart_select_notif_callback_t uart_select_notif_callback; /*!< Notification about select() events */
+    uart_rx_data_cb_t rx_data_callback; /*!< User callback for RX data available notification */
+    void *rx_data_callback_user_data;   /*!< User data for RX data callback */
     QueueHandle_t event_queue;          /*!< UART event queue handler*/
     RingbufHandle_t rx_ring_buf;        /*!< RX ring buffer handler*/
     RingbufHandle_t tx_ring_buf;        /*!< TX ring buffer handler*/
@@ -1188,6 +1190,11 @@ static void UART_ISR_ATTR uart_rx_intr_handler_default(void *param)
                         need_yield |= (HPTaskAwoken == pdTRUE);
                     }
                     UART_EXIT_CRITICAL_ISR(&uart_selectlock);
+                    
+                    // Call user-registered RX data callback
+                    if (p_uart->rx_data_callback) {
+                        p_uart->rx_data_callback(uart_num, uart_event.size, p_uart->rx_data_callback_user_data);
+                    }
                 }
             } else {
                 UART_ENTER_CRITICAL_ISR(&(uart_context[uart_num].spinlock));
@@ -1736,6 +1743,8 @@ esp_err_t uart_driver_install(uart_port_t uart_num, int rx_buffer_size, int tx_b
         p_uart_obj[uart_num]->rx_int_usr_mask = UART_INTR_RXFIFO_FULL | UART_INTR_RXFIFO_TOUT;
         p_uart_obj[uart_num]->tx_buf_size = tx_buffer_size;
         p_uart_obj[uart_num]->uart_select_notif_callback = NULL;
+        p_uart_obj[uart_num]->rx_data_callback = NULL;
+        p_uart_obj[uart_num]->rx_data_callback_user_data = NULL;
         xSemaphoreGive(p_uart_obj[uart_num]->tx_fifo_sem);
         uart_pattern_queue_reset(uart_num, UART_PATTERN_DET_QLEN_DEFAULT);
         if (uart_queue) {
@@ -1962,6 +1971,19 @@ void uart_set_always_rx_timeout(uart_port_t uart_num, bool always_rx_timeout)
     } else {
         p_uart_obj[uart_num]->rx_always_timeout_flg = false;
     }
+}
+
+esp_err_t uart_set_rx_data_callback(uart_port_t uart_num, uart_rx_data_cb_t rx_data_cb, void *user_data)
+{
+    ESP_RETURN_ON_FALSE((uart_num < UART_NUM_MAX), ESP_ERR_INVALID_ARG, UART_TAG, "uart_num error");
+    ESP_RETURN_ON_FALSE((p_uart_obj[uart_num]), ESP_FAIL, UART_TAG, "uart driver not installed");
+    
+    UART_ENTER_CRITICAL(&(uart_context[uart_num].spinlock));
+    p_uart_obj[uart_num]->rx_data_callback = rx_data_cb;
+    p_uart_obj[uart_num]->rx_data_callback_user_data = user_data;
+    UART_EXIT_CRITICAL(&(uart_context[uart_num].spinlock));
+    
+    return ESP_OK;
 }
 
 #if SOC_UART_SUPPORT_SLEEP_RETENTION && CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP

@@ -94,6 +94,18 @@ typedef struct {
 typedef intr_handle_t uart_isr_handle_t;
 
 /**
+ * @brief UART RX data available callback function type
+ *
+ * @param uart_num UART port number
+ * @param size Number of bytes available in the RX buffer
+ * @param user_data User data passed during callback registration
+ *
+ * @note This callback is called from ISR context, so it should be kept short and not block.
+ *       Do not call any blocking UART functions from this callback.
+ */
+typedef void (*uart_rx_data_cb_t)(uart_port_t uart_num, size_t size, void *user_data);
+
+/**
  * @brief Install UART driver and set the UART to the default configuration.
  *
  * UART ISR handler will be attached to the same CPU core that this function is running on.
@@ -857,6 +869,29 @@ esp_err_t uart_set_loop_back(uart_port_t uart_num, bool loop_back_en);
   *
   */
 void uart_set_always_rx_timeout(uart_port_t uart_num, bool always_rx_timeout_en);
+
+/**
+ * @brief Register a callback function to be called when RX data is available
+ *
+ * This function registers a callback that will be invoked from the UART ISR when
+ * data is received. The callback allows the application to be notified immediately
+ * when data arrives, without needing to poll or wait on an event queue.
+ *
+ * @param uart_num UART port number, the max port number is (UART_NUM_MAX -1)
+ * @param rx_data_cb Callback function to be called when RX data is available.
+ *                   Pass NULL to unregister the callback.
+ * @param user_data User data pointer that will be passed to the callback function
+ *
+ * @return
+ *     - ESP_OK   Success
+ *     - ESP_ERR_INVALID_ARG Parameter error
+ *     - ESP_FAIL Driver not installed
+ *
+ * @note The callback is called from ISR context. Keep it short and do not block.
+ * @note Do not call uart_read_bytes or other blocking UART functions from the callback.
+ * @note The callback is called before the data is placed in the event queue (if configured).
+ */
+esp_err_t uart_set_rx_data_callback(uart_port_t uart_num, uart_rx_data_cb_t rx_data_cb, void *user_data);
 
 #ifdef __cplusplus
 }
