@@ -3,11 +3,7 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-
-// clang-format off
-
 #include <stdio.h>
-#include "esp_system.h"
 #include "esp_random.h"
 #include "esp_log.h"
 #include "WL_Flash.h"
@@ -247,75 +243,34 @@ esp_err_t WL_Flash::init()
 esp_err_t WL_Flash::recoverPos()
 {
     esp_err_t result = ESP_OK;
-    size_t position = 0;
-
-    ESP_LOGI(TAG, "%s start", __func__);
-    bool found=false;
-    //do a coarse grid search first
-    for (size_t i = 0; i < this->state.wl_part_max_sec_pos; i=i+200) {
+    ESP_LOGV(TAG, "%s start", __func__);
+    // Position records are written strictly in order (updateWL() writes record wl_dummy_sec_pos,
+    // then increments it) and the whole state section is erased on wrap-around. So the valid
+    // records always form a prefix, and the first invalid record can be found by binary search
+    // instead of a linear scan, which is very slow on large partitions.
+    size_t lo = 0;                                  // all records before lo are valid
+    size_t hi = this->state.wl_part_max_sec_pos;    // all records from hi on are invalid
+    while (lo < hi) {
+        size_t i = lo + (hi - lo) / 2;
         bool pos_bits;
-        position = i;
         result = this->partition->read(this->addr_state1 + sizeof(wl_state_t) + i * this->cfg.wl_pos_update_record_size, this->temp_buff, this->cfg.wl_pos_update_record_size);
-        pos_bits = this->OkBuffSet(i);
         WL_RESULT_CHECK(result);
-        ESP_LOGV(TAG, "%s - check pos: result=0x%08" PRIx32 ", position= %" PRIu32 ", pos_bits= 0x%08" PRIx32 , __func__, (uint32_t) result, (uint32_t) position, (uint32_t) pos_bits);
-        if (pos_bits == false) {
-            if(i>=200)
-                position=i-200;
-            break; // we have found a coarse position
-        }
-    }
-    //do finer grid search beginning from the coarse position
-    for (size_t i = position; i < this->state.wl_part_max_sec_pos; i=i+20) {
-        bool pos_bits;
-        position = i;
-        result = this->partition->read(this->addr_state1 + sizeof(wl_state_t) + i * this->cfg.wl_pos_update_record_size, this->temp_buff, this->cfg.wl_pos_update_record_size);
         pos_bits = this->OkBuffSet(i);
-        WL_RESULT_CHECK(result);
-        ESP_LOGV(TAG, "%s - check pos: result=0x%08" PRIx32 ", position= %" PRIu32 ", pos_bits= 0x%08" PRIx32 , __func__, (uint32_t) result, (uint32_t) position, (uint32_t) pos_bits);
-        if (pos_bits == false) {
-            if(i>=20)
-                position=i-20;
-            break; // we have found finer position
+        ESP_LOGV(TAG, "%s - check pos: result=0x%08" PRIx32 ", position= %" PRIu32 ", pos_bits= 0x%08" PRIx32 , __func__, (uint32_t) result, (uint32_t) i, (uint32_t) pos_bits);
+        if (pos_bits) {
+            lo = i + 1;
+        } else {
+            hi = i;
         }
     }
-    //then do final linear search
-    for (size_t i = position; i < this->state.wl_part_max_sec_pos; i++) {
-        bool pos_bits;
-        position = i;
-        result = this->partition->read(this->addr_state1 + sizeof(wl_state_t) + i * this->cfg.wl_pos_update_record_size, this->temp_buff, this->cfg.wl_pos_update_record_size);
-        pos_bits = this->OkBuffSet(i);
-        WL_RESULT_CHECK(result);
-        ESP_LOGV(TAG, "%s - check pos: result=0x%08" PRIx32 ", position= %" PRIu32 ", pos_bits= 0x%08" PRIx32 , __func__, (uint32_t) result, (uint32_t) position, (uint32_t) pos_bits);
-        if (pos_bits == false) {
-            found=true;
-            break; // we have found position
-        }
-    }
-
-    //if grid search failed, try it again with old method
-    if(position==this->state.wl_part_max_sec_pos && found==false){
-        for (size_t i = 0; i < this->state.wl_part_max_sec_pos; i++) {
-            bool pos_bits;
-            position = i;
-            result = this->partition->read(this->addr_state1 + sizeof(wl_state_t) + i * this->cfg.wl_pos_update_record_size, this->temp_buff,     this->cfg.wl_pos_update_record_size);
-            pos_bits = this->OkBuffSet(i);
-            WL_RESULT_CHECK(result);
-            ESP_LOGV(TAG, "%s - check pos: result=0x%08" PRIx32 ", position= %" PRIu32 ", pos_bits= 0x%08" PRIx32 , __func__, (uint32_t) result, (uint32_t) position, (uint32_t) pos_bits);
-            if (pos_bits == false) {
-                break; // we have found position
-            }
-        }
-    }
+    size_t position = lo; // first invalid record, or wl_part_max_sec_pos if all are valid
 
     this->state.wl_dummy_sec_pos = position;
     if (this->state.wl_dummy_sec_pos == this->state.wl_part_max_sec_pos && this->state.wl_dummy_sec_pos != 0) {
         this->state.wl_dummy_sec_pos--;
     }
-
-    ESP_LOGI(TAG, "%s - this->state.wl_dummy_sec_pos= 0x%08" PRIx32 ", position= 0x%08" PRIx32 ", result= 0x%08" PRIx32 ", wl_part_max_sec_pos= 0x%08" PRIx32 , __func__, (uint32_t)this->state.wl_dummy_sec_pos, (uint32_t)position, (uint32_t)result, (uint32_t)this->state.wl_part_max_sec_pos);
+    ESP_LOGD(TAG, "%s - this->state.wl_dummy_sec_pos= 0x%08" PRIx32 ", position= 0x%08" PRIx32 ", result= 0x%08" PRIx32 ", wl_part_max_sec_pos= 0x%08" PRIx32 , __func__, (uint32_t)this->state.wl_dummy_sec_pos, (uint32_t)position, (uint32_t)result, (uint32_t)this->state.wl_part_max_sec_pos);
     ESP_LOGV(TAG, "%s done", __func__);
-
     return result;
 }
 
