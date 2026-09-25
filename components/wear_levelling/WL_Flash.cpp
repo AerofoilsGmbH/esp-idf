@@ -263,13 +263,12 @@ esp_err_t WL_Flash::recoverPos()
             hi = i;
         }
     }
-    size_t position = lo; // first invalid record, or wl_part_max_sec_pos if all are valid
 
-    this->state.wl_dummy_sec_pos = position;
+    this->state.wl_dummy_sec_pos = lo; // first invalid record, or wl_part_max_sec_pos if all are valid
     if (this->state.wl_dummy_sec_pos == this->state.wl_part_max_sec_pos && this->state.wl_dummy_sec_pos != 0) {
         this->state.wl_dummy_sec_pos--;
     }
-    ESP_LOGD(TAG, "%s - this->state.wl_dummy_sec_pos= 0x%08" PRIx32 ", position= 0x%08" PRIx32 ", result= 0x%08" PRIx32 ", wl_part_max_sec_pos= 0x%08" PRIx32 , __func__, (uint32_t)this->state.wl_dummy_sec_pos, (uint32_t)position, (uint32_t)result, (uint32_t)this->state.wl_part_max_sec_pos);
+    ESP_LOGD(TAG, "%s - this->state.wl_dummy_sec_pos= 0x%08" PRIx32 ", position= 0x%08" PRIx32 ", result= 0x%08" PRIx32 ", wl_part_max_sec_pos= 0x%08" PRIx32 , __func__, (uint32_t)this->state.wl_dummy_sec_pos, (uint32_t)lo, (uint32_t)result, (uint32_t)this->state.wl_part_max_sec_pos);
     ESP_LOGV(TAG, "%s done", __func__);
     return result;
 }
