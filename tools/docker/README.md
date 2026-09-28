@@ -123,6 +123,15 @@ docker run --rm -v $PWD:/project -v $PWD/.idf-cache:/opt/esp/cache -w /project \
 ### GitHub Actions
 
 ```yaml
+# Must run before the cache is restored. The files are owned by root (written by the container), so they are removed
+# from within a container as well.
+- name: Clean cache directory
+  run: >
+    docker run --rm --entrypoint rm
+    -v ${{ runner.temp }}:/runner-temp
+    ghcr.io/aerofoilsgmbh/esp-idf:v6.1-esp32s3
+    -rf /runner-temp/idf-cache
+
 - uses: actions/cache@v4
   with:
     path: ${{ runner.temp }}/idf-cache
@@ -140,7 +149,8 @@ docker run --rm -v $PWD:/project -v $PWD/.idf-cache:/opt/esp/cache -w /project \
     idf.py build
 ```
 
-The unique key saves an updated cache after every run; `restore-keys` restores the newest one.
+The unique key saves an updated cache after every run; `restore-keys` restores the newest one. The clean step makes
+sure only the restored cache is used, even on self-hosted runners where a previous job may have left files behind.
 
 The cache is kept in `runner.temp` (outside the checkout), so it neither appears in `git status` nor leaves root-owned
 files in the workspace. Untracked files do not affect the `--dirty` suffix of the version, so a cache directory inside
