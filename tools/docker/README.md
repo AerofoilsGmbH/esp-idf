@@ -125,7 +125,7 @@ docker run --rm -v $PWD:/project -v $PWD/.idf-cache:/opt/esp/cache -w /project \
 ```yaml
 - uses: actions/cache@v4
   with:
-    path: .idf-cache
+    path: ${{ runner.temp }}/idf-cache
     key: idf-esp32s3-${{ github.sha }}
     restore-keys: idf-esp32s3-
 
@@ -133,7 +133,7 @@ docker run --rm -v $PWD:/project -v $PWD/.idf-cache:/opt/esp/cache -w /project \
   run: >
     docker run --rm
     -v ${{ github.workspace }}:/project
-    -v ${{ github.workspace }}/.idf-cache:/opt/esp/cache
+    -v ${{ runner.temp }}/idf-cache:/opt/esp/cache
     -e CCACHE_MAXSIZE=1G
     -w /project
     ghcr.io/aerofoilsgmbh/esp-idf:v6.1-esp32s3
@@ -141,6 +141,10 @@ docker run --rm -v $PWD:/project -v $PWD/.idf-cache:/opt/esp/cache -w /project \
 ```
 
 The unique key saves an updated cache after every run; `restore-keys` restores the newest one.
+
+The cache is kept in `runner.temp` (outside the checkout), so it neither appears in `git status` nor leaves root-owned
+files in the workspace. Untracked files do not affect the `--dirty` suffix of the version, so a cache directory inside
+the project (as in the local example above) only needs a `.gitignore` entry.
 
 ## Limitations
 
