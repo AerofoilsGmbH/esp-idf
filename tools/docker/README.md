@@ -79,19 +79,39 @@ repository. Otherwise the version falls back to the previous tag (e.g. `v6.1-dev
 
 ## Running
 
-The entrypoint activates the IDF environment, so `idf.py` can be called directly:
+The entrypoint activates the IDF environment, so `idf.py` can be called directly.
+
+### Single command
 
 ```bash
 docker run --rm -v $PWD:/project -w /project ghcr.io/aerofoilsgmbh/esp-idf:v6.1-esp32s3 idf.py build
 ```
 
-Interactive shell:
+### Interactive shell
+
+Without a command the container starts `bash` with the IDF environment already activated. `-it` attaches the
+terminal:
 
 ```bash
-docker run --rm -it -v $PWD:/project -w /project ghcr.io/aerofoilsgmbh/esp-idf:v6.1-esp32s3
+docker run --rm -it -v $PWD:/project -v $PWD/.idf-cache:/opt/esp/cache -w /project \
+  ghcr.io/aerofoilsgmbh/esp-idf:v6.1-esp32s3
 ```
 
-Run tests in QEMU with `pytest-embedded` (after `idf.py build`):
+Inside the shell:
+
+```bash
+idf.py build              # build the project
+idf.py qemu monitor       # run the app in QEMU with the serial monitor attached (exit with Ctrl+])
+pytest ...                # run tests, see below
+exit                      # leave the container
+```
+
+The project directory is mounted, so build results stay on the host. Everything else changed inside the container is
+discarded on exit (`--rm`). Files created in the container are owned by root.
+
+### Tests in QEMU
+
+Run tests with `pytest-embedded` (after `idf.py build`):
 
 ```bash
 docker run --rm -v $PWD:/project -w /project ghcr.io/aerofoilsgmbh/esp-idf:v6.1-esp32s3 \
