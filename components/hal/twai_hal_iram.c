@@ -107,6 +107,13 @@ uint32_t twai_hal_get_events(twai_hal_context_t *hal_ctx)
     }
     if (events & TWAI_HAL_EVENT_BUS_RECOV_CPLT) {
         twai_ll_enter_reset_mode(hal_ctx->dev);     //Enter reset mode to stop the controller
+#ifdef CONFIG_TWAI_ERRATA_FIX_RX_FRAME_INVALID
+        if (hal_ctx->state_flags & TWAI_HAL_STATE_FLAG_RESET_PENDING) {
+            //Bus recovery complete. Now do the errata reset that was deferred during bus-off
+            TWAI_HAL_CLEAR_BITS(hal_ctx->state_flags, TWAI_HAL_STATE_FLAG_RESET_PENDING);
+            TWAI_HAL_SET_BITS(events, TWAI_HAL_EVENT_NEED_PERIPH_RESET);
+        }
+#endif
     }
     if (events & TWAI_HAL_EVENT_BUS_ERR) {
 #ifdef CONFIG_TWAI_ERRATA_FIX_RX_FRAME_INVALID
@@ -114,11 +121,20 @@ uint32_t twai_hal_get_events(twai_hal_context_t *hal_ctx)
         twai_ll_err_dir_t dir;
         twai_ll_err_seg_t seg;
         twai_ll_parse_err_code_cap(hal_ctx->dev, &type, &dir, &seg);    //Decode error interrupt
-        //Check for errata condition (RX message has bus error at particular segments)
-        if (dir == TWAI_LL_ERR_DIR_RX &&
-            ((seg == TWAI_LL_ERR_SEG_DATA || seg == TWAI_LL_ERR_SEG_CRC_SEQ) ||
-             (seg == TWAI_LL_ERR_SEG_ACK_DELIM && type == TWAI_LL_ERR_OTHER))) {
-            TWAI_HAL_SET_BITS(events, TWAI_HAL_EVENT_NEED_PERIPH_RESET);
+        (void) dir;
+        //Check for errata condition (TX or RX message has bus error at particular segments).
+        //On the ESP32, a bus error in the data or CRC field of a TX frame can also corrupt the data
+        //field of the NEXT received frame, so the direction must not be checked here.
+        //See https://github.com/espressif/esp-idf/issues/12474 (backport of upstream 238e5b5f140)
+        if ((seg == TWAI_LL_ERR_SEG_DATA || seg == TWAI_LL_ERR_SEG_CRC_SEQ) ||
+            (seg == TWAI_LL_ERR_SEG_ACK_DELIM && type == TWAI_LL_ERR_OTHER)) {
+            if (hal_ctx->state_flags & TWAI_HAL_STATE_FLAG_BUS_OFF) {
+                //A reset now would break the bus-off state (reset and recovery share the same
+                //register), so defer it until bus recovery is complete
+                TWAI_HAL_SET_BITS(hal_ctx->state_flags, TWAI_HAL_STATE_FLAG_RESET_PENDING);
+            } else {
+                TWAI_HAL_SET_BITS(events, TWAI_HAL_EVENT_NEED_PERIPH_RESET);
+            }
         }
 #endif
         twai_ll_clear_err_code_cap(hal_ctx->dev);
@@ -145,7 +161,9 @@ uint32_t twai_hal_get_events(twai_hal_context_t *hal_ctx)
 void twai_hal_prepare_for_reset(twai_hal_context_t *hal_ctx)
 {
     uint32_t status = twai_ll_get_status(hal_ctx->dev);
-    if (!(status & TWAI_LL_STATUS_TBS)) {   //Transmit buffer is NOT free, indicating an Ongoing TX will be cancelled by the HW reset
+    //Only a running controller can have an ongoing TX (e.g. not when stopped after bus recovery)
+    if ((hal_ctx->state_flags & TWAI_HAL_STATE_FLAG_RUNNING) &&
+        !(status & TWAI_LL_STATUS_TBS)) {   //Transmit buffer is NOT free, indicating an Ongoing TX will be cancelled by the HW reset
         TWAI_HAL_SET_BITS(hal_ctx->state_flags, TWAI_HAL_STATE_FLAG_TX_NEED_RETRY);
         //Note: Even if the TX completes right after this, we still consider it will be retried.
         //Worst case the same message will get sent twice.
@@ -161,7 +179,11 @@ void twai_hal_recover_from_reset(twai_hal_context_t *hal_ctx)
     twai_ll_enter_reset_mode(hal_ctx->dev);
     twai_ll_enable_extended_reg_layout(hal_ctx->dev);
     twai_ll_restore_reg(hal_ctx->dev, &hal_ctx->reg_save);
-    twai_ll_exit_reset_mode(hal_ctx->dev);
+    //Only restart the controller if it was running. After a deferred reset at the end of bus
+    //recovery, the controller must stay in reset mode (stopped) until twai_start() is called.
+    if (hal_ctx->state_flags & TWAI_HAL_STATE_FLAG_RUNNING) {
+        twai_ll_exit_reset_mode(hal_ctx->dev);
+    }
     (void) twai_ll_get_and_clear_intrs(hal_ctx->dev);
 
     if (hal_ctx->state_flags & TWAI_HAL_STATE_FLAG_TX_NEED_RETRY) {
