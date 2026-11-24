@@ -37,6 +37,9 @@ extern "C" {
 #if defined(CONFIG_TWAI_ERRATA_FIX_RX_FRAME_INVALID) || defined(CONFIG_TWAI_ERRATA_FIX_RX_FIFO_CORRUPT)
 #define TWAI_HAL_STATE_FLAG_TX_NEED_RETRY       (1 << 7)    //TX needs to be restarted due to errata workarounds
 #endif
+#ifdef CONFIG_TWAI_ERRATA_FIX_RX_FRAME_INVALID
+#define TWAI_HAL_STATE_FLAG_RESET_PENDING       (1 << 8)    //Errata reset required, deferred until bus recovery completes
+#endif
 
 //Interrupt Events
 #define TWAI_HAL_EVENT_BUS_OFF                  (1 << 0)
